@@ -18,6 +18,7 @@
  */
 import { ComponentType } from 'react';
 import {
+  act,
   render,
   screen,
   userEvent,
@@ -159,7 +160,12 @@ const setupLaunchQueue = (fileHandle: MockFileHandle | null = null) => {
           `LaunchQueue consumer was never registered after ${MAX_CONSUMER_POLL_ATTEMPTS} polling attempts`,
         );
       }
-      await savedConsumer(params);
+      // The consumer drives React state updates (and router navigation), so it
+      // must run inside act() for the resulting render to be flushed before the
+      // assertions run.
+      await act(async () => {
+        await savedConsumer?.(params);
+      });
     },
   };
 };
@@ -225,10 +231,9 @@ test('redirects when no files are provided', async () => {
   });
 });
 
-// eslint-disable-next-line jest/no-disabled-tests
-test.skip('handles CSV file correctly', async () => {
+test('handles CSV file correctly', async () => {
   const fileHandle = createMockFileHandle('test.csv');
-  setupLaunchQueue(fileHandle);
+  const { triggerConsumer } = setupLaunchQueue();
 
   render(
     <MemoryRouter initialEntries={['/superset/file-handler']}>
@@ -238,6 +243,8 @@ test.skip('handles CSV file correctly', async () => {
     </MemoryRouter>,
     { useRedux: true },
   );
+
+  await triggerConsumer({ files: [fileHandle] });
 
   const modal = await screen.findByTestId('upload-modal');
   expect(modal).toBeInTheDocument();
