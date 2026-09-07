@@ -17,13 +17,41 @@
  * under the License.
  */
 import type React from 'react';
-import { render, screen, fireEvent } from 'spec/helpers/testing-library';
-import userEvent from '@testing-library/user-event';
+import {
+  render,
+  screen,
+  fireEvent,
+  userEvent,
+  waitFor,
+} from 'spec/helpers/testing-library';
 import { AGGREGATES } from 'src/explore/constants';
 import AdhocMetric from 'src/explore/components/controls/MetricControl/AdhocMetric';
 import AdhocFilterEditPopover from '.';
 import AdhocFilter from '../AdhocFilter';
 import { Clauses, ExpressionTypes } from '../types';
+
+// The Ace-backed EditorHost cannot be typed into under jsdom; swap in a
+// plain textarea so the SQL expression can be edited like a user would.
+jest.mock('src/core/editors', () => {
+  const React = require('react');
+  return {
+    EditorHost: React.forwardRef(
+      (
+        { value, onChange }: { value: string; onChange: (v: string) => void },
+        ref: React.Ref<{ resize: () => void }>,
+      ) => {
+        React.useImperativeHandle(ref, () => ({ resize: jest.fn() }));
+        return (
+          <textarea
+            data-test="sql-input"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+          />
+        );
+      },
+    ),
+  };
+});
 
 const simpleAdhocFilter = new AdhocFilter({
   expressionType: ExpressionTypes.Simple,
@@ -120,35 +148,36 @@ describe('AdhocFilterEditPopover', () => {
     ).toBeDisabled();
   });
 
-  /* oxlint-disable-next-line jest/no-disabled-tests */
-  test.skip('updates the filter when changes are made', async () => {
+  test('updates the filter when changes are made', async () => {
     const onChange = jest.fn();
     renderPopover({
       onChange,
       adhocFilter: sqlAdhocFilter,
     });
 
-    // Switch to SQL tab
     await userEvent.click(screen.getByRole('tab', { name: /custom sql/i }));
 
-    // Find and update the SQL editor
+    const saveButton = screen.getByTestId(
+      'adhoc-filter-edit-popover-save-button',
+    );
+    expect(saveButton).toBeDisabled();
+
     const sqlInput = screen.getByTestId('sql-input');
-    fireEvent.change(sqlInput, { target: { value: 'COUNT(*) > 0' } });
+    await userEvent.clear(sqlInput);
+    await userEvent.type(sqlInput, 'COUNT(*) > 0');
+    expect(sqlInput).toHaveValue('COUNT(*) > 0');
 
-    // Wait for validation to complete
-    await screen.findByRole('button', { name: /save/i });
+    await waitFor(() => expect(saveButton).toBeEnabled());
 
-    // Click save button
-    const saveButton = screen.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton);
 
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sqlExpression: 'COUNT(*) > 0',
-        expressionType: ExpressionTypes.Sql,
-        clause: Clauses.Where,
-      }),
-    );
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(expect.any(AdhocFilter));
+    expect(onChange.mock.calls[0][0]).toMatchObject({
+      sqlExpression: 'COUNT(*) > 0',
+      expressionType: ExpressionTypes.Sql,
+      clause: Clauses.Where,
+    });
   });
 
   test('enables save button when valid changes are made', async () => {
