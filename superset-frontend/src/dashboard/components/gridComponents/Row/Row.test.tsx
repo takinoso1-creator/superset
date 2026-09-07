@@ -23,6 +23,7 @@ import {
   render,
   RenderResult,
   screen,
+  userEvent,
 } from 'spec/helpers/testing-library';
 
 import { DASHBOARD_GRID_ID } from 'src/dashboard/util/constants';
@@ -94,8 +95,33 @@ jest.mock(
 jest.mock(
   'src/dashboard/components/menu/WithPopoverMenu',
   () =>
-    ({ children }: { children: React.ReactNode }) => (
-      <div data-test="mock-with-popover-menu">{children}</div>
+    ({
+      children,
+      editMode,
+      isFocused,
+      menuItems = [],
+    }: {
+      children: React.ReactNode;
+      editMode?: boolean;
+      isFocused?: boolean;
+      menuItems?: React.ReactNode[];
+    }) => (
+      <div data-test="mock-with-popover-menu">
+        {children}
+        {editMode &&
+          isFocused &&
+          menuItems.map((item, index) => (
+            <div key={`menu-item-${index}`}>{item}</div>
+          ))}
+      </div>
+    ),
+);
+
+jest.mock(
+  'src/dashboard/components/menu/BackgroundStyleDropdown',
+  () =>
+    ({ id }: { id: string }) => (
+      <div data-test="background-style-dropdown" id={id} />
     ),
 );
 
@@ -224,18 +250,15 @@ test('should render a DeleteComponentButton in editMode', () => {
   expect(getByTestId('mock-delete-component-button')).toBeInTheDocument();
 });
 
-/* oxlint-disable-next-line jest/no-disabled-tests */
-test.skip('should render a BackgroundStyleDropdown when focused', () => {
-  const { rerender } = setup({ component: rowWithoutChildren });
-  expect(screen.queryByTestId('background-style-dropdown')).toBeFalsy();
+test('should render a BackgroundStyleDropdown when focused', async () => {
+  setup({ component: rowWithoutChildren, editMode: true });
+  expect(
+    screen.queryByTestId('background-style-dropdown'),
+  ).not.toBeInTheDocument();
 
-  // we cannot set props on the Row because of the WithDragDropContext wrapper
-  rerender(<Row {...props} component={rowWithoutChildren} editMode />);
-  const buttons = screen.getAllByRole('button');
-  const settingsButton = buttons[1];
-  fireEvent.click(settingsButton);
+  await userEvent.click(screen.getByRole('button', { name: 'Row settings' }));
 
-  expect(screen.queryByTestId('background-style-dropdown')).toBeTruthy();
+  expect(screen.getByTestId('background-style-dropdown')).toBeInTheDocument();
 });
 
 test('should call deleteComponent when deleted', () => {
