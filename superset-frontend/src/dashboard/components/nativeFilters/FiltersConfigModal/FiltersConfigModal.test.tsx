@@ -17,12 +17,14 @@
  * under the License.
  */
 import { Preset } from '@superset-ui/core';
+import { Constants } from '@superset-ui/core/components';
 import fetchMock from 'fetch-mock';
 import chartQueries from 'spec/fixtures/mockChartQueries';
 import { dashboardLayout } from 'spec/fixtures/mockDashboardLayout';
 import mockDatasource, { datasourceId, id } from 'spec/fixtures/mockDatasource';
 import { buildNativeFilter } from 'spec/fixtures/mockNativeFilters';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -658,8 +660,9 @@ test('reorders filters via keyboard (Space, ArrowDown, Space)', async () => {
   }
 }, 30000);
 
-// eslint-disable-next-line jest/no-disabled-tests -- flaky timeout, see https://github.com/apache/superset/pull/39181
-test.skip('updates sidebar title when filter name changes', async () => {
+test('updates sidebar title when filter name changes', async () => {
+  jest.useFakeTimers();
+
   const nativeFilterConfig = [
     buildNativeFilter('NATIVE_FILTER-1', 'state', []),
     buildNativeFilter('NATIVE_FILTER-2', 'country', []),
@@ -691,6 +694,13 @@ test.skip('updates sidebar title when filter name changes', async () => {
 
   await userEvent.clear(filterNameInput);
   await userEvent.type(filterNameInput, 'New Filter Name');
+
+  // The sidebar title is recomputed by a debounced form change handler.
+  // Flush that debounce deterministically instead of waiting in real time.
+  act(() => {
+    jest.advanceTimersByTime(Constants.SLOW_DEBOUNCE);
+  });
+  jest.useRealTimers();
 
   await waitFor(() => {
     const tabsAfterChange = within(filterContainer).getAllByRole('tab');
