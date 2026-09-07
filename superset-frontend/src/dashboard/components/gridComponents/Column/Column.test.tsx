@@ -25,6 +25,7 @@ import IconButton from 'src/dashboard/components/IconButton';
 import { getMockStore } from 'spec/fixtures/mockStore';
 import { dashboardLayout as mockLayout } from 'spec/fixtures/mockDashboardLayout';
 import { initialState } from 'src/SqlLab/fixtures';
+import type { ResizableContainerProps } from 'src/dashboard/components/resizable/ResizableContainer';
 import ColumnComponent from './Column';
 
 // Cast to accept partial mock props in tests
@@ -63,6 +64,48 @@ jest.mock(
       </div>
     ),
 );
+type ResizeConstraintProps = Pick<
+  ResizableContainerProps,
+  | 'adjustableWidth'
+  | 'adjustableHeight'
+  | 'widthStep'
+  | 'widthMultiple'
+  | 'minWidthMultiple'
+  | 'maxWidthMultiple'
+>;
+const resizableContainerRenders: ResizeConstraintProps[] = [];
+
+jest.mock('src/dashboard/components/resizable/ResizableContainer', () => {
+  const actual: {
+    default: React.ComponentType<ResizableContainerProps>;
+  } = jest.requireActual(
+    'src/dashboard/components/resizable/ResizableContainer',
+  );
+  const ActualResizableContainer = actual.default;
+  return {
+    __esModule: true,
+    ...actual,
+    default: (props: ResizableContainerProps) => {
+      const {
+        adjustableWidth,
+        adjustableHeight,
+        widthStep,
+        widthMultiple,
+        minWidthMultiple,
+        maxWidthMultiple,
+      } = props;
+      resizableContainerRenders.push({
+        adjustableWidth,
+        adjustableHeight,
+        widthStep,
+        widthMultiple,
+        minWidthMultiple,
+        maxWidthMultiple,
+      });
+      return <ActualResizableContainer {...props} />;
+    },
+  };
+});
 jest.mock(
   'src/dashboard/components/menu/WithPopoverMenu',
   () =>
@@ -107,6 +150,10 @@ const props = {
   deleteComponent() {},
   updateComponents() {},
 };
+
+beforeEach(() => {
+  resizableContainerRenders.length = 0;
+});
 
 function setup(overrideProps: Record<string, unknown> = {}) {
   // We have to wrap provide DragDropContext for the underlying DragDroppable
@@ -216,23 +263,21 @@ test('should pass its own width as availableColumnCount to children', () => {
   );
 });
 
-/* oxlint-disable-next-line jest/no-disabled-tests */
-test.skip('should pass appropriate dimensions to ResizableContainer', () => {
-  const { container } = setup({ component: columnWithoutChildren });
-  const columnWidth = columnWithoutChildren.meta.width;
+test('should pass appropriate dimensions to ResizableContainer', () => {
+  setup({ component: columnWithoutChildren });
+  const columnWidth = columnWithoutChildren.meta.width ?? 0;
 
-  expect(container.querySelector('.resizable-container')).toEqual({
-    columnWidth,
+  expect(resizableContainerRenders.length).toBeGreaterThan(0);
+  resizableContainerRenders.forEach(resizableProps => {
+    expect(resizableProps).toEqual({
+      adjustableWidth: true,
+      adjustableHeight: false,
+      widthStep: props.columnWidth,
+      widthMultiple: columnWidth,
+      minWidthMultiple: props.minColumnWidth,
+      maxWidthMultiple: props.availableColumnCount + columnWidth,
+    });
   });
-  // const resizableProps = wrapper.find(ResizableContainer).props();
-  // expect(resizableProps.adjustableWidth).toBe(true);
-  // expect(resizableProps.adjustableHeight).toBe(false);
-  // expect(resizableProps.widthStep).toBe(props.columnWidth);
-  // expect(resizableProps.widthMultiple).toBe(columnWidth);
-  // expect(resizableProps.minWidthMultiple).toBe(props.minColumnWidth);
-  // expect(resizableProps.maxWidthMultiple).toBe(
-  //   props.availableColumnCount + columnWidth,
-  // );
 });
 
 test('should render between-items Droppables for each child in editMode', () => {
