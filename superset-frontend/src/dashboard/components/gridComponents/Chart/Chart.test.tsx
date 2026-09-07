@@ -226,12 +226,29 @@ test('should call refreshChart when SliceHeader calls forceRefresh', () => {
   expect(refreshChart).toHaveBeenCalled();
 });
 
-/* oxlint-disable-next-line jest/no-disabled-tests */
-test.skip('should call changeFilter when ChartContainer calls changeFilter', () => {
-  const mockChangeFilter = jest.fn();
-  const wrapper = setup({ changeFilter: mockChangeFilter }) as any;
-  wrapper.instance().changeFilter();
-  expect((mockChangeFilter as any).callCount).toBe(1);
+test('should call changeFilter when ChartContainer calls changeFilter', () => {
+  setup();
+  const addFilter = capturedChartContainerProps.addFilter as (
+    col: string,
+    vals: unknown[],
+    merge?: boolean,
+  ) => void;
+  expect(addFilter).toBeInstanceOf(Function);
+
+  act(() => {
+    addFilter('gender', ['boy'], false);
+  });
+
+  expect(changeFilter).toHaveBeenCalledTimes(1);
+  expect(changeFilter).toHaveBeenCalledWith(
+    queryId,
+    { gender: ['boy'] },
+    false,
+  );
+  expect(logEvent).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ id: queryId, columns: ['gender'] }),
+  );
 });
 
 test('should call exportChart when exportCSV is clicked', async () => {
